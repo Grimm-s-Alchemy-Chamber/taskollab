@@ -1,0 +1,19 @@
+import os
+
+import dotenv
+import firebase_admin
+from dotenv import load_dotenv
+from firebase_admin import auth, credentials
+
+load_dotenv()
+firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS")
+
+cred = credentials.Certificate(firebase_credentials_path)
+firebase_admin.initialize_app(cred)
+
+def verify_token(id_token):
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return decoded_token
+    except Exception as e:
+        return None
