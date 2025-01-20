@@ -3,6 +3,7 @@ from flask_socketio import SocketIO
 from flask_cors import CORS
 from flask_migrate import Migrate, migrate
 from app.db import db
+from app.routes.analytics_routes import analytics_bp
 
 from app.routes.board_routes import boards_bp
 
@@ -17,7 +18,6 @@ def create_app():
 
     db.init_app(app)
     migrate.init_app(app, db)
-    socketio.init_app(app)
     CORS(app)
     with app.app_context():
         db.create_all()  # Automatically create tables (optional for prod)
@@ -29,6 +29,7 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(boards_bp, url_prefix='/api')
     app.register_blueprint(task_bp, url_prefix='/api')
+    app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
 
     @socketio.on('connect')
     def handle_connect():

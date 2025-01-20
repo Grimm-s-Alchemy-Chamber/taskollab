@@ -1,10 +1,9 @@
 # In app/routes/analytics_routes.py
-from flask import jsonify, Blueprint
+from flask import jsonify
 
 from app import db
 from app.models import Task, Category
 
-analytics_bp = Blueprint('analytics', __name__)
 
 @analytics_bp.route('/board/<int:board_id>')
 def get_board_analytics(board_id):

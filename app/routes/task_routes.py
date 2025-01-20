@@ -51,6 +51,8 @@ from app import socketio
 from app.services.permissions import check_task_permission
 
 task_bp = Blueprint('task_bp', __name__)
+
+
 # Create a Task
 @task_bp.route('/tasks', methods=['POST'])
 def create_task():
@@ -67,12 +69,12 @@ def create_task():
 
         data = request.get_json()
         title = data.get('title')
-        category = data.get('category')
+        category_name = data.get('category')
         board_id = data.get('board_id')
         description = data.get('description')
         due_date = data.get('due_date')
 
-        if not all([title, category, board_id]):
+        if not all([title, category_name, board_id]):
             return jsonify({"error": "Missing required fields"}), 400
 
         # Ensure board exists and user is a member of it
@@ -225,9 +227,11 @@ def delete_task(task_id):
 from werkzeug.utils import secure_filename
 from flask import current_app
 
+
 def allowed_file(filename):
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
+        filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
+
 
 # Function to check allowed file extensions
 @task_bp.route('/tasks/<int:task_id>/attach', methods=['POST'])
