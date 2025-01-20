@@ -40,20 +40,17 @@
 #     db.session.add(task)
 #     db.session.commit()
 #     return jsonify({"message": "Task created", "task": {"id": task.id, "title": task.title}}), 201
+import datetime
 import os
 
 from flask import Blueprint, request, jsonify
-from werkzeug.utils import secure_filename
 
-from app.models import db, Task, Board, User
+from app.models import db, Task, Board, User, Category
 from app.services.firebase_auth import verify_token
+from app import socketio
+from app.services.permissions import check_task_permission
 
 task_bp = Blueprint('task_bp', __name__)
-UPLOAD_FOLDER = 'path_to_your_uploads_folder'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf'}
-task_bp.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-
 # Create a Task
 @task_bp.route('/tasks', methods=['POST'])
 def create_task():
@@ -72,7 +69,8 @@ def create_task():
         title = data.get('title')
         category = data.get('category')
         board_id = data.get('board_id')
-        assigned_user_id = data.get('assigned_user_id')
+        description = data.get('description')
+        due_date = data.get('due_date')
 
         if not all([title, category, board_id]):
             return jsonify({"error": "Missing required fields"}), 400
@@ -85,15 +83,25 @@ def create_task():
         if user not in board.users:
             return jsonify({"error": "You are not part of this board"}), 403
 
+        category = Category.query.filter_by(name=category_name).first()
+        if not category:
+            category = Category(name=category_name)
+            db.session.add(category)
+            db.session.commit()
+
         new_task = Task(
             title=title,
-            category=category,
+            description=description,
+            category_id=category.id,
             board_id=board_id,
-            assigned_user_id=assigned_user_id if assigned_user_id else user.id
+            creator_id=user.id,  # Correct field
+            due_date=datetime.fromisoformat(due_date) if due_date else None
         )
 
         db.session.add(new_task)
         db.session.commit()
+        from app import socketio
+        socketio.emit('task_update', {'board_id': new_task.board_id}, room=str(new_task.board_id))
 
         return jsonify(new_task.to_dict()), 201
     except Exception as e:
@@ -214,28 +222,52 @@ def delete_task(task_id):
         return jsonify({"error": str(e)}), 500
 
 
-# Function to check allowed file extensions
+from werkzeug.utils import secure_filename
+from flask import current_app
+
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
-
-# Route to handle file upload for a task
-@task_bp.route('/api/tasks/<int:task_id>/upload', methods=['POST'])
+# Function to check allowed file extensions
+@task_bp.route('/tasks/<int:task_id>/attach', methods=['POST'])
 def upload_attachment(task_id):
-    # Check if the file is included in the request
-    file = request.files.get('file')
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(task_bp.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
+    try:
+        # Authentication
+        token = request.headers.get('Authorization').split(" ")[1]
+        user_data = verify_token(token)
+        user = User.query.filter_by(firebase_uid=user_data['uid']).first()
 
-        # Get the task and update the attachment field
-        task = Task.query.get(task_id)
-        if task:
-            task.attachments = file_path  # You can store a URL here instead of the file path if using a cloud service
+        # Get task and validate permissions
+        task = Task.query.get_or_404(task_id)
+        if not check_task_permission(user, task):
+            return jsonify({"error": "Permission denied"}), 403
+
+        # File handling
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
+            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+
+            # Update task attachments
+            if task.attachments:
+                attachments = task.attachments.split(',')
+                attachments.append(f"/uploads/{filename}")
+                task.attachments = ','.join(attachments)
+            else:
+                task.attachments = f"/uploads/{filename}"
+
             db.session.commit()
-            return jsonify({'message': 'Attachment uploaded successfully', 'attachment': file_path}), 200
-        else:
-            return jsonify({'error': 'Task not found'}), 404
-    else:
+            return jsonify({'message': 'File uploaded successfully'}), 200
+
         return jsonify({'error': 'Invalid file type'}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

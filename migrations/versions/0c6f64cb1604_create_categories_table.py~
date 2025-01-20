@@ -1,0 +1,28 @@
+"""Create categories table
+
+Revision ID: 0c6f64cb1604
+Revises: 629f9080d2bf
+Create Date: 2025-01-20 23:42:48.025214
+
+"""
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision = '0c6f64cb1604'
+down_revision = '629f9080d2bf'
+branch_labels = None
+depends_on = None
+
+
+def upgrade():
+    op.create_table(
+        'categories',
+        sa.Column('id', sa.Integer(), primary_key=True),
+        sa.Column('name', sa.String(100), nullable=False, unique=True)
+    )
+
+
+def downgrade():
+    pass

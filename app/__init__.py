@@ -13,6 +13,7 @@ migrate = Migrate()
 def create_app():
     app = Flask(__name__)
     app.config.from_object('config.Config')
+    socketio.init_app(app)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -28,5 +29,9 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(boards_bp, url_prefix='/api')
     app.register_blueprint(task_bp, url_prefix='/api')
+
+    @socketio.on('connect')
+    def handle_connect():
+        print('Client connected')
 
     return app
