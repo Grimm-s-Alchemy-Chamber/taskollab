@@ -40,13 +40,18 @@
 #     db.session.add(task)
 #     db.session.commit()
 #     return jsonify({"message": "Task created", "task": {"id": task.id, "title": task.title}}), 201
-
+import os
 
 from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
+
 from app.models import db, Task, Board, User
 from app.services.firebase_auth import verify_token
 
 task_bp = Blueprint('task_bp', __name__)
+UPLOAD_FOLDER = 'path_to_your_uploads_folder'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf'}
+task_bp.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
 # Create a Task
@@ -209,3 +214,28 @@ def delete_task(task_id):
         return jsonify({"error": str(e)}), 500
 
 
+# Function to check allowed file extensions
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# Route to handle file upload for a task
+@task_bp.route('/api/tasks/<int:task_id>/upload', methods=['POST'])
+def upload_attachment(task_id):
+    # Check if the file is included in the request
+    file = request.files.get('file')
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(task_bp.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+
+        # Get the task and update the attachment field
+        task = Task.query.get(task_id)
+        if task:
+            task.attachments = file_path  # You can store a URL here instead of the file path if using a cloud service
+            db.session.commit()
+            return jsonify({'message': 'Attachment uploaded successfully', 'attachment': file_path}), 200
+        else:
+            return jsonify({'error': 'Task not found'}), 404
+    else:
+        return jsonify({'error': 'Invalid file type'}), 400

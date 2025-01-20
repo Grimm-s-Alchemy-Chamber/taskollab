@@ -14,7 +14,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     boards = db.relationship('Board', secondary='user_boards', back_populates='users')
-    tasks = db.relationship('Task', back_populates='assigned_user')
+    tasks = db.relationship('Task', back_populates='creator')
 
     def to_dict(self):
         return {
@@ -50,6 +50,7 @@ class Board(db.Model):
 
 # Task Model
 # Updated Task Model with categories
+# Task Model
 class Task(db.Model):
     __tablename__ = 'tasks'
 
@@ -58,12 +59,14 @@ class Task(db.Model):
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default='Pending')  # Example: Pending, In Progress, Done
     due_date = db.Column(db.DateTime, nullable=True)
-    category = db.Column(db.String(50), nullable=False)  # New category field
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)  # Updated: Foreign key
     board_id = db.Column(db.Integer, db.ForeignKey('boards.id'), nullable=False)
-    assigned_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # The user who created the task
+    attachments = db.Column(db.Text, nullable=True)  # Stores file URLs or paths as text
 
     board = db.relationship('Board', back_populates='tasks')
-    assigned_user = db.relationship('User', back_populates='tasks')
+    creator = db.relationship('User', back_populates='tasks')  # User who created the task
+    category = db.relationship('Category', back_populates='tasks')
 
     def to_dict(self):
         return {
@@ -71,11 +74,29 @@ class Task(db.Model):
             'title': self.title,
             'description': self.description,
             'status': self.status,
-            'category': self.category,  # Include category in response
+            'category': self.category.name if self.category else None,  # Updated: Category name
             'due_date': self.due_date.isoformat() if self.due_date else None,
-            'assigned_user_id': self.assigned_user_id,
-            'board_id': self.board_id
+            'creator_id': self.creator_id,  # The ID of the user who created the task
+            'board_id': self.board_id,
+            'attachments': self.attachments  # Include attachments field
+
         }
+
+# Category Model
+class Category(db.Model):
+    __tablename__ = 'categories'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    tasks = db.relationship('Task', back_populates='category')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name
+        }
+
 
 
 # Association Table: Users <-> Boards
